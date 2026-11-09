@@ -81,8 +81,8 @@ int frodo_mul_add_as_plus_e(uint16_t *out, const uint16_t *s, const uint16_t *e,
     }
 #endif
     
-{ double t2 = now_us(); t_gen += t1 - t0; t_mul += t2 - t1;
-      if (++calls % 50 == 0) fprintf(stderr, "gen %.1f us, mul %.1f us per call\n", t_gen/calls, t_mul/calls); }
+{ double t2 = now_us(); static long seen = 0; if (++seen > 5) { t_gen += t1 - t0; t_mul += t2 - t1; calls++; }
+      if (calls > 0 && calls % 50 == 0) fprintf(stderr, "gen %.1f us, mul %.1f us per call\n", t_gen/calls, t_mul/calls); }
 #if defined(USE_AES128_FOR_A)
     AES128_free_schedule(aes_key_schedule);
 #endif
