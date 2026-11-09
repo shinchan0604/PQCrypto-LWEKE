@@ -15,12 +15,22 @@
 #endif    
 
 
+#include <time.h>
+#include <stdio.h>
+static double t_gen = 0, t_mul = 0; static long calls = 0;
+static inline double now_us(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts); return ts.tv_sec*1e6 + ts.tv_nsec/1e3; }
+
+#if defined(USE_CUDA) && (PARAMS_N == 640)
+extern int frodo_cuda_mul_add_as_plus_e(uint16_t *out, const uint16_t *A, const uint16_t *s, const uint16_t *e);
+#endif
+
 int frodo_mul_add_as_plus_e(uint16_t *out, const uint16_t *s, const uint16_t *e, const uint8_t *seed_A) 
 { // Generate-and-multiply: generate matrix A (N x N) row-wise, multiply by s on the right.
   // Inputs: s, e (N x N_BAR)
   // Output: out = A*s + e (N x N_BAR)
     int i, j, k;
-    int16_t A[PARAMS_N * PARAMS_N] = {0};       
+    int16_t A[PARAMS_N * PARAMS_N] = {0};
+    double t0 = now_us();       
        
 #if defined(USE_AES128_FOR_A)    // Matrix A generation using AES128, done per 128-bit block                                          
     size_t A_len = PARAMS_N * PARAMS_N * sizeof(int16_t);    
@@ -54,8 +64,12 @@ int frodo_mul_add_as_plus_e(uint16_t *out, const uint16_t *s, const uint16_t *e,
     for (i = 0; i < PARAMS_N * PARAMS_N; i++) {
         A[i] = LE_TO_UINT16(A[i]);
     }
+    double t1 = now_us();
     memcpy(out, e, PARAMS_NBAR * PARAMS_N * sizeof(uint16_t));  
 
+#if defined(USE_CUDA) && (PARAMS_N == 640)
+    if (!frodo_cuda_mul_add_as_plus_e(out, (const uint16_t*)A, s, e)) return 0;
+#else
     for (i = 0; i < PARAMS_N; i++) {                            // Matrix multiplication-addition A*s + e
         for (k = 0; k < PARAMS_NBAR; k++) {
             uint16_t sum = 0;
@@ -65,7 +79,10 @@ int frodo_mul_add_as_plus_e(uint16_t *out, const uint16_t *s, const uint16_t *e,
             out[i*PARAMS_NBAR + k] += sum;                      // Adding e. No need to reduce modulo 2^15, extra bits are taken care of during packing later on.
         }
     }
+#endif
     
+{ double t2 = now_us(); static long seen = 0; if (++seen > 5) { t_gen += t1 - t0; t_mul += t2 - t1; calls++; }
+      if (calls > 0 && calls % 50 == 0) fprintf(stderr, "gen %.1f us, mul %.1f us per call\n", t_gen/calls, t_mul/calls); }
 #if defined(USE_AES128_FOR_A)
     AES128_free_schedule(aes_key_schedule);
 #endif
