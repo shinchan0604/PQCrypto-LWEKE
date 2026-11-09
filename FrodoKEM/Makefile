@@ -94,6 +94,13 @@ CFLAGS += -mavx2 -maes -msse2
 endif
 endif
 
+NVCC ?= nvcc
+ifeq "$(USE_CUDA)" "TRUE"
+CFLAGS+= -D USE_CUDA
+CUDA_OBJS := objs/frodo_cuda.o
+LDFLAGS+= -L/usr/local/cuda/lib64 -lcudart -lstdc++
+endif
+
 .PHONY: all check clean prettyprint
 
 all: lib640 lib976 lib1344 tests KATS
@@ -113,6 +120,10 @@ objs/frodo976.o: src/frodo976.c
 objs/frodo1344.o: src/frodo1344.c
 	@mkdir -p $(@D)
 	$(CC) -c  $(CFLAGS) $< -o $@
+
+objs/frodo_cuda.o: src/frodo_cuda.cu
+	@mkdir -p $(@D)
+	$(NVCC) -O2 -arch=sm_75 -c $< -o $@
 
 # RAND
 objs/random/random.o: ../common/random/random.c ../common/random/random.h
@@ -175,7 +186,7 @@ SHAKEx4_OBJS := objs/sha3/fips202x4.o objs/sha3/keccak4x/KeccakP-1600-times4-SIM
 endif
 endif
 
-lib640: $(KEM_FRODO640_OBJS) $(RAND_OBJS) $(AES_OBJS) $(SHAKE_OBJS) $(SHAKEx4_OBJS)
+lib640: $(KEM_FRODO640_OBJS) $(RAND_OBJS) $(AES_OBJS) $(SHAKE_OBJS) $(SHAKEx4_OBJS) $(CUDA_OBJS)
 	rm -rf frodo640
 	mkdir frodo640
 	$(AR) frodo640/libfrodo.a $^
@@ -198,7 +209,7 @@ tests: lib640 lib976 lib1344 tests/ds_benchmark.h
 	$(CC) $(CFLAGS) -L./frodo976 tests/test_KEM976.c -lfrodo $(LDFLAGS) -o frodo976/test_KEM $(ARM_SETTING)
 	$(CC) $(CFLAGS) -L./frodo1344 tests/test_KEM1344.c -lfrodo $(LDFLAGS) -o frodo1344/test_KEM $(ARM_SETTING)
 
-lib640_for_KATs: $(KEM_FRODO640_OBJS) $(AES_OBJS) $(SHAKE_OBJS) $(SHAKEx4_OBJS)
+lib640_for_KATs: $(KEM_FRODO640_OBJS) $(AES_OBJS) $(SHAKE_OBJS) $(SHAKEx4_OBJS) $(CUDA_OBJS)
 	$(AR) frodo640/libfrodo_for_testing.a $^
 	$(RANLIB) frodo640/libfrodo_for_testing.a
 
